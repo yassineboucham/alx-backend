@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -9,9 +8,10 @@
 <body>
     <h1>{{ _('home_header') }}</h1>
     {% if g.user %}
-        <p>{{ _('logged_in_as', username=g.user.name) }}</p>
+    <p>{{ _('logged_in_as', username=g.user.get('name', '')) }}</p>
     {% else %}
-        <p>{{ _('not_logged_in') }}</p>
+    <p>{{ _('not_logged_in') }}</p>
     {% endif %}
+    <h1>7-index.html</h2>
 </body>
 </html>

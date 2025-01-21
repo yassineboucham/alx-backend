@@ -1,37 +1,26 @@
 #!/usr/bin/env python3
+"""Module for task 8
 """
-A Basic flask application
-"""
+from typing import Dict, Union
+from flask import Flask, render_template, request, g
+from flask_babel import Babel, format_datetime
 import pytz
-import datetime
-from typing import (
-    Dict, Union
-)
 
-from flask import Flask
-from flask import g, request
-from flask import render_template
-from flask_babel import Babel
-from flask_babel import format_datetime
-
-
-class Config(object):
-    """
-    Application configuration class
-    """
-    LANGUAGES = ['en', 'fr']
-    BABEL_DEFAULT_LOCALE = 'en'
-    BABEL_DEFAULT_TIMEZONE = 'UTC'
-
-
-# Instantiate the application object
 app = Flask(__name__)
+
+app.url_map.strict_slashes = False
+
+
+class Config:
+    """Represents a Flask Babel configuration.
+    """
+    LANGUAGES = ["en", "fr"]
+    BABEL_DEFAULT_LOCALE = "en"
+    BABEL_DEFAULT_TIMEZONE = "UTC"
+
+
 app.config.from_object(Config)
-
-# Wrap the application with Babel
 babel = Babel(app)
-
-
 users = {
     1: {"name": "Balou", "locale": "fr", "timezone": "Europe/Paris"},
     2: {"name": "Beyonce", "locale": "en", "timezone": "US/Central"},
@@ -40,64 +29,98 @@ users = {
 }
 
 
-def get_user(id) -> Union[Dict[str, Union[str, None]], None]:
-    """
-    Validate user login details
-    Args:
-        id (str): user id
+@app.route("/")
+def index() -> str:
+    """The index function displays the home page of the web application.
+
+    It retrieves the current time based on the inferred time zone using the
+    format_datetime() function.
+    The time is stored in flask.g.time for use in the index.html template.
+
     Returns:
-        (Dict): user dictionary if id is valid else None
+        str: contents of the home page.
     """
-    return users.get(int(id), None)
+    g.time = format_datetime()
+    return render_template("index.html")
 
 
 @babel.localeselector
 def get_locale() -> str:
+    """"Returns the preferred locale for the user.
+
+    The order of priority is:
+    1. Locale from URL parameters
+    2. Locale from user settings
+    3. Locale from request header
+    4. Default locale
+
+    Returns:
+        str: The preferred locale.
     """
-    Gets locale from request object
-    """
-    options = [
-        request.args.get('locale', '').strip(),
-        g.user.get('locale', None) if g.user else None,
-        request.accept_languages.best_match(app.config['LANGUAGES']),
-        Config.BABEL_DEFAULT_LOCALE
-    ]
-    for locale in options:
-        if locale and locale in Config.LANGUAGES:
-            return locale
+    # Get the locale parameter from the incoming request
+    locale = request.args.get('locale')
+    # Get list of supported languages from Config
+    supported_languages = app.config["LANGUAGES"]
+    if locale and locale in supported_languages:
+        # If the locale parameter is present and is a supported locale,
+        # return it
+        return locale
+    # Locale from user settings
+    if g.user and g.user['locale'] in app.config["LANGUAGES"]:
+        return g.user['locale']
+    header_locale = request.headers.get('locale', '')
+    if header_locale in app.config["LANGUAGES"]:
+        return header_locale
+    return request.accept_languages.best_match(app.config["LANGUAGES"])
 
 
-@babel.timezoneselector
-def get_timezone() -> str:
+def get_user() -> Union[Dict, None]:
+    """Returns a user dictionary based on the given ID
+
+    Returns:
+        Union[Dict, None]: The user dictionary if found, otherwise None.
     """
-    Gets timezone from request object
-    """
-    tz = request.args.get('timezone', '').strip()
-    if not tz and g.user:
-        tz = g.user['timezone']
-    try:
-        tz = pytz.timezone(tz).zone
-    except pytz.exceptions.UnknownTimeZoneError:
-        tz = app.config['BABEL_DEFAULT_TIMEZONE']
-    return tz
+    # Get the user_id from the login_as URL parameters
+    login_id = request.args.get('login_as')
+    # If the user ID exists in the URL parameters
+    if login_id:
+        # Get the user dictionary from the `users` dictionary using the user ID
+        return users.get(int(login_id))
+    # If the user ID does not exist in the URL parameters, return None
+    return None
 
 
 @app.before_request
 def before_request() -> None:
+    """Function to be executed before every request.
     """
-    Adds valid user to the global session object `g`
-    """
-    setattr(g, 'user', get_user(request.args.get('login_as', 0)))
-    setattr(g, 'time', format_datetime(datetime.datetime.now()))
+    # Use the get_user function to get the user details
+    user = get_user()
+    # Set the user as a global variable on flask.g
+    g.user = user
 
 
-@app.route('/', strict_slashes=False)
-def index() -> str:
+# Use the timezoneselector decorator to set the get_timezone function as the
+# timezone selector
+@babel.timezoneselector
+def get_timezone() -> str:
+    """Return the user's preferred timezone.
+
+    Returns:
+        str: The user's preferred timezone.
     """
-    Renders a basic html template
-    """
-    return render_template('index.html')
+    timezone = request.args.get('timezone', '').strip()
+    if not timezone and g.user:
+        timezone = g.user['timezone']
+    try:
+        return pytz.timezone(timezone).zone
+    except pytz.exceptions.UnknownTimeZoneError:
+        return app.config['BABEL_DEFAULT_TIMEZONE']
 
 
-if __name__ == '__main__':
-    app.run()
+# Register the before_request function to be executed before every request
+app.before_request(before_request)
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
